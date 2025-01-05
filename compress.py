@@ -27,10 +27,15 @@ def find_sequences(data):
     # Keep only sequences that appear more than once
     return {k: v for k, v in sequences.items() if len(v) > 1}
 
-def compress_data(input_file):
+def compress_data(input_file, encode=None):
     # Read input file
-    with open(input_file, 'rb') as f:
-        data = f.read()
+    if encode:
+        with open(input_file, 'r', encoding=encode) as f:
+            text_data = f.read()
+            data = text_data.encode(encode)
+    else:
+        with open(input_file, 'rb') as f:
+            data = f.read()
     
     # Find repeating sequences
     print("Finding sequences...")
@@ -43,7 +48,6 @@ def compress_data(input_file):
     for seq in sequences.keys():
         token = current_token
         replacements[seq] = token
-        # Generate next token
         current_token = bytes([current_token[0], current_token[1] + 1])
     
     # Compress data by replacing sequences
@@ -58,11 +62,17 @@ def compress_data(input_file):
             compressed_data[pos:pos + len(seq)] = token
             pos += 1
     
-    # Save dictionary and compressed data
+    # Save dictionary and compressed data with encoding info
     with open(input_file + '.dict', 'wb') as f:
-        # Save dictionary size
+        # Save encoding flag
+        f.write(struct.pack('I', 1 if encode else 0))
+        if encode:
+            enc_bytes = encode.encode('ascii')
+            f.write(struct.pack('I', len(enc_bytes)))
+            f.write(enc_bytes)
+        
+        # Save dictionary size and entries
         f.write(struct.pack('I', len(replacements)))
-        # Save each sequence and its token
         for seq, token in replacements.items():
             f.write(struct.pack('I', len(seq)))
             f.write(seq)
@@ -79,6 +89,6 @@ def compress_data(input_file):
     print(f"Compressed size: {compressed_size:,} bytes")
 
 if __name__ == "__main__":
-    input_file = "gpt2-pytorch_model.bin"
-    file_path = "LICENSE"
-    compress_data(input_file)
+    input_file = "LICENSE"
+    encode = 'utf-8'  # Set to None for binary files
+    compress_data(input_file, encode)
