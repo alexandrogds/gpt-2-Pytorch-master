@@ -14,9 +14,15 @@ def find_sequences(data):
     sequences = defaultdict(list)
     data_len = len(data)
     
-    for i in range(data_len - MIN_SEQUENCE_LENGTH + 1):
-        seq = data[i:i + MIN_SEQUENCE_LENGTH]
-        sequences[seq].append(i)
+    # Calculate total iterations for progress bar
+    total_iterations = data_len - MIN_SEQUENCE_LENGTH + 1
+    
+    # Add progress bar for sequence search
+    with tqdm(total=total_iterations, desc="Finding sequences") as pbar:
+        for i in range(data_len - MIN_SEQUENCE_LENGTH + 1):
+            seq = data[i:i + MIN_SEQUENCE_LENGTH]
+            sequences[seq].append(i)
+            pbar.update(1)
     
     # Keep only sequences that appear more than once
     return {k: v for k, v in sequences.items() if len(v) > 1}
