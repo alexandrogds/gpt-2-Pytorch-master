@@ -8,6 +8,7 @@ def decompress_data(input_file):
     # Read dictionary
     print("Reading dictionary...")
     replacements = {}
+    
     with open(input_file + '.dict', 'rb') as f:
         # Read encoding flag
         is_encoded = struct.unpack('I', f.read(4))[0]
@@ -37,16 +38,24 @@ def decompress_data(input_file):
     for token, sequence in tqdm(replacements.items()):
         pos = 0
         while True:
-            pos = data.find(token, pos)
+            pos = decompressed_data.find(token, pos)
             if pos == -1:
                 break
             decompressed_data[pos:pos + len(token)] = sequence
-            pos += 1
+            pos += len(sequence)
     
     # Save decompressed data
     if encoding:
-        with open(input_file + '.decompressed', 'w', encoding=encoding) as f:
-            f.write(decompressed_data.decode(encoding))
+        try:
+            # First decode the entire decompressed data
+            decoded_text = decompressed_data.decode(encoding)
+            # Then write as text
+            with open(input_file + '.decompressed', 'w', encoding=encoding) as f:
+                f.write(decoded_text)
+        except UnicodeDecodeError:
+            # Fallback to binary write if decode fails
+            with open(input_file + '.decompressed', 'wb') as f:
+                f.write(decompressed_data)
     else:
         with open(input_file + '.decompressed', 'wb') as f:
             f.write(decompressed_data)

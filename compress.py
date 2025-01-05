@@ -30,6 +30,7 @@ def find_sequences(data):
 def compress_data(input_file, encode=None):
     # Read input file
     if encode:
+        # Store original text data
         with open(input_file, 'r', encoding=encode) as f:
             text_data = f.read()
             data = text_data.encode(encode)
@@ -38,12 +39,11 @@ def compress_data(input_file, encode=None):
             data = f.read()
     
     # Find repeating sequences
-    print("Finding sequences...")
     sequences = find_sequences(data)
     
     # Create replacement dictionary
     replacements = {}
-    current_token = b'\xFF\x00'  # Start with a unique token
+    current_token = b'\xFE\x00'  # Changed from FF to FE to avoid UTF-8 conflicts
     
     for seq in sequences.keys():
         token = current_token
