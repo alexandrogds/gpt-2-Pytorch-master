@@ -2,7 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_POSITIONS 1000000
+#define CHUNK_SIZE (512 * 1024 * 1024)  // 512MB chunks
+#define MAX_POSITIONS (1024 * 1024 * 256)  // Limit positions array
 #define MAX_SEQUENCES 1000000
 
 // Structure to store a sequence and its positions
@@ -94,12 +95,11 @@ void free_sequence_list(SequenceList* list) {
     free(list);
 }
 
-int main() {
-    const char* file_path = "gpt2-pytorch_model.bin";
+void process_file_in_chunks(const char* file_path) {
     FILE* f = fopen(file_path, "rb");
     if (!f) {
         printf("Error: %s not found\n", file_path);
-        return 1;
+        return;
     }
 
     // Get file size
@@ -107,28 +107,39 @@ int main() {
     size_t file_size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    // Read file
-    unsigned char* data = (unsigned char*)malloc(file_size);
-    fread(data, 1, file_size, f);
-    fclose(f);
+    // Allocate chunk buffer
+    unsigned char* chunk = (unsigned char*)malloc(CHUNK_SIZE);
+    FILE* out_f = fopen("sequences_report.txt", "w");
 
-    // Find sequences
-    SequenceList* sequences = create_sequence_list();
-    size_t min_len = 2;
-    size_t max_len = 2;  // Set to 2 as in Python code
+    size_t bytes_read = 0;
+    printf("Processing file in chunks...\n");
 
-    printf("Searching sequences...\n");
-    for (size_t seq_len = min_len; seq_len <= max_len; seq_len++) {
-        add_sequence(sequences, data, seq_len, file_size);
+    while (bytes_read < file_size) {
+        size_t current_chunk = fread(chunk, 1, CHUNK_SIZE, f);
+        if (current_chunk == 0) break;
+
+        // Process chunk
+        SequenceList* sequences = create_sequence_list();
+        add_sequence(sequences, chunk, 2, current_chunk);  // Fixed sequence length of 2
+        
+        // Write results for this chunk
+        write_results(sequences, "sequences_report.txt");
+        
+        // Cleanup chunk data
+        free_sequence_list(sequences);
+        
+        bytes_read += current_chunk;
+        printf("Processed: %.2f%%\n", (float)bytes_read * 100 / file_size);
     }
 
-    // Write results
-    write_results(sequences, "sequences_report.txt");
-
     // Cleanup
-    free_sequence_list(sequences);
-    free(data);
+    free(chunk);
+    fclose(f);
+    fclose(out_f);
+}
 
+int main() {
+    process_file_in_chunks("gpt2-pytorch_model.bin");
     printf("Done! Results written to sequences_report.txt\n");
     return 0;
 }
