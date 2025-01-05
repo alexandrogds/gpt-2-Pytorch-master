@@ -4,26 +4,34 @@ This module is used to compress the data of gpt2-pytorch_model.bin file.
 
 import os
 from tqdm import tqdm
+import gc
 
-CHUNK_SIZE = 1024 * 1024  # 1MB chunks
+# Adjust chunk size to stay within 4GB limit
+CHUNK_SIZE = 512 * 1024 * 1024  # 512MB chunks
+MAX_SEQUENCES_PER_CHUNK = 1000000
 
 def find_sequences_in_chunk(chunk, min_len=2, max_len=2):
     chunk_size = len(chunk)
-    for seq_len in range(min_len, max_len + 1):
-        # Use set to store unique sequences in this chunk
-        seen_sequences = {}
-        
-        for i in range(chunk_size - seq_len + 1):
-            sequence = chunk[i:i + seq_len]
-            if sequence in seen_sequences:
-                seen_sequences[sequence].append(i)
-            else:
-                seen_sequences[sequence] = [i]
-        
-        # Yield only sequences that appear more than once
-        for seq, positions in seen_sequences.items():
-            if len(positions) > 1:
-                yield seq, positions
+    seen_sequences = {}
+    
+    # Process only sequences of length 2 to save memory
+    seq_len = 2
+    
+    for i in range(chunk_size - seq_len + 1):
+        sequence = chunk[i:i + seq_len]
+        if len(seen_sequences) >= MAX_SEQUENCES_PER_CHUNK:
+            # Write current sequences and clear memory
+            yield from ((seq, pos) for seq, pos in seen_sequences.items() if len(pos) > 1)
+            seen_sequences.clear()
+            gc.collect()
+            
+        if sequence in seen_sequences:
+            seen_sequences[sequence].append(i)
+        else:
+            seen_sequences[sequence] = [i]
+    
+    # Yield remaining sequences
+    yield from ((seq, pos) for seq, pos in seen_sequences.items() if len(pos) > 1)
 
 def process_file(file_path):
     # Open output file early to write results incrementally
