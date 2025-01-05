@@ -1,74 +1,78 @@
 """
-This module is used to compress the data of gpt2-pytorch_model.bin file.
+This module is used to compress the data.
 """
-
 import os
+import struct
+from collections import defaultdict
 from tqdm import tqdm
-import gc
 
-# Adjust chunk size to stay within 4GB limit
 CHUNK_SIZE = 512 * 1024 * 1024  # 512MB chunks
-MAX_SEQUENCES_PER_CHUNK = 1000000
+MIN_SEQUENCE_LENGTH = 2
+MAX_SEQUENCE_LENGTH = 2
 
-def find_sequences_in_chunk(chunk, min_len=2, max_len=2):
-    chunk_size = len(chunk)
-    seen_sequences = {}
+def find_sequences(data):
+    sequences = defaultdict(list)
+    data_len = len(data)
     
-    # Process only sequences of length 2 to save memory
-    seq_len = 2
+    for i in range(data_len - MIN_SEQUENCE_LENGTH + 1):
+        seq = data[i:i + MIN_SEQUENCE_LENGTH]
+        sequences[seq].append(i)
     
-    for i in range(chunk_size - seq_len + 1):
-        sequence = chunk[i:i + seq_len]
-        if len(seen_sequences) >= MAX_SEQUENCES_PER_CHUNK:
-            # Write current sequences and clear memory
-            yield from ((seq, pos) for seq, pos in seen_sequences.items() if len(pos) > 1)
-            seen_sequences.clear()
-            gc.collect()
-            
-        if sequence in seen_sequences:
-            seen_sequences[sequence].append(i)
-        else:
-            seen_sequences[sequence] = [i]
-    
-    # Yield remaining sequences
-    yield from ((seq, pos) for seq, pos in seen_sequences.items() if len(pos) > 1)
+    # Keep only sequences that appear more than once
+    return {k: v for k, v in sequences.items() if len(v) > 1}
 
-def process_file(file_path):
-    # Open output file early to write results incrementally
-    with open('sequences_report.txt', 'w') as out_f:
-        with open(file_path, 'rb') as f:
-            # Get file size for progress bar
-            f.seek(0, 2)
-            file_size = f.tell()
-            f.seek(0)
-            
-            # Process file in chunks
-            with tqdm(total=file_size, desc="Processing file") as pbar:
-                while True:
-                    chunk = f.read(CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    
-                    # Process each chunk
-                    for sequence, positions in find_sequences_in_chunk(chunk):
-                        # Write results immediately
-                        out_f.write(f"Sequence (hex): {sequence.hex()}\n")
-                        out_f.write(f"Length: {len(sequence)} bytes\n")
-                        out_f.write(f"Positions: {positions}\n")
-                        out_f.write("-" * 50 + "\n")
-                        out_f.flush()  # Ensure writing to disk
-                    
-                    pbar.update(len(chunk))
-
-def main():
-    file_path = "gpt2-pytorch_model.bin"
+def compress_data(input_file):
+    # Read input file
+    with open(input_file, 'rb') as f:
+        data = f.read()
     
-    if not os.path.exists(file_path):
-        print(f"Error: {file_path} not found")
-        return
+    # Find repeating sequences
+    print("Finding sequences...")
+    sequences = find_sequences(data)
     
-    process_file(file_path)
-    print("Done! Results written to sequences_report.txt")
+    # Create replacement dictionary
+    replacements = {}
+    current_token = b'\xFF\x00'  # Start with a unique token
+    
+    for seq in sequences.keys():
+        token = current_token
+        replacements[seq] = token
+        # Generate next token
+        current_token = bytes([current_token[0], current_token[1] + 1])
+    
+    # Compress data by replacing sequences
+    print("Compressing data...")
+    compressed_data = bytearray(data)
+    for seq, token in tqdm(replacements.items()):
+        pos = 0
+        while True:
+            pos = data.find(seq, pos)
+            if pos == -1:
+                break
+            compressed_data[pos:pos + len(seq)] = token
+            pos += 1
+    
+    # Save dictionary and compressed data
+    with open(input_file + '.dict', 'wb') as f:
+        # Save dictionary size
+        f.write(struct.pack('I', len(replacements)))
+        # Save each sequence and its token
+        for seq, token in replacements.items():
+            f.write(struct.pack('I', len(seq)))
+            f.write(seq)
+            f.write(token)
+    
+    # Save compressed data
+    with open(input_file + '.compressed', 'wb') as f:
+        f.write(compressed_data)
+    
+    original_size = len(data)
+    compressed_size = len(compressed_data)
+    print(f"Compression ratio: {compressed_size/original_size:.2%}")
+    print(f"Original size: {original_size:,} bytes")
+    print(f"Compressed size: {compressed_size:,} bytes")
 
 if __name__ == "__main__":
-    main()
+    input_file = "gpt2-pytorch_model.bin"
+    file_path = "LICENSE"
+    compress_data(input_file)
