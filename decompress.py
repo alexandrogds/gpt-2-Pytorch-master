@@ -30,37 +30,43 @@ def decompress_data(input_file):
     # Read compressed data
     print("Reading compressed data...")
     with open(input_file + '.compressed', 'rb') as f:
-        data = f.read()
+        compressed_data = f.read()
     
     # Decompress data
     print("Decompressing data...")
-    decompressed_data = bytearray(data)
-    for token, sequence in tqdm(replacements.items()):
-        pos = 0
-        while True:
-            pos = decompressed_data.find(token, pos)
-            if pos == -1:
-                break
-            decompressed_data[pos:pos + len(token)] = sequence
-            pos += len(sequence)
+    result = bytearray(compressed_data)  # Make a copy to work with
+    
+    # Sort tokens by length in descending order to handle overlapping sequences
+    sorted_tokens = sorted(replacements.items(), key=lambda x: len(x[0]), reverse=True)
+    
+    with tqdm(total=len(sorted_tokens)) as pbar:
+        for token, sequence in sorted_tokens:
+            # Replace all occurrences of token with original sequence
+            current_pos = 0
+            while True:
+                pos = result.find(token, current_pos)
+                if pos == -1:
+                    break
+                result[pos:pos + len(token)] = sequence
+                current_pos = pos + len(sequence)
+            pbar.update(1)
     
     # Save decompressed data
     if encoding:
         try:
-            # First decode the entire decompressed data
-            decoded_text = decompressed_data.decode(encoding)
-            # Then write as text
+            # Decode the entire result as text
+            decoded_text = result.decode(encoding)
             with open(input_file + '.decompressed', 'w', encoding=encoding) as f:
                 f.write(decoded_text)
-        except UnicodeDecodeError:
-            # Fallback to binary write if decode fails
+        except UnicodeDecodeError as e:
+            print(f"Warning: Could not decode as {encoding}, saving as binary")
             with open(input_file + '.decompressed', 'wb') as f:
-                f.write(decompressed_data)
+                f.write(result)
     else:
         with open(input_file + '.decompressed', 'wb') as f:
-            f.write(decompressed_data)
+            f.write(result)
     
-    print(f"Decompressed size: {len(decompressed_data):,} bytes")
+    print(f"Decompressed size: {len(result):,} bytes")
 
 if __name__ == "__main__":
     input_file = "LICENSE"
