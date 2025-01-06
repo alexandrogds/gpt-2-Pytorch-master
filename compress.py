@@ -1,13 +1,12 @@
 """
 This module is used to compress the data.
 """
-import os
-import struct
+import os; import sys; import struct
 from collections import defaultdict
 from tqdm import tqdm
 
 CHUNK_SIZE = 512 * 1024 * 1024  # 512MB chunks
-MIN_SEQUENCE_LENGTH = 2
+MIN_SEQUENCE_LENGTH = 35
 MAX_SEQUENCE_LENGTH = 2
 
 def find_sequences(data):
@@ -22,6 +21,12 @@ def find_sequences(data):
         for i in range(data_len - MIN_SEQUENCE_LENGTH + 1):
             seq = data[i:i + MIN_SEQUENCE_LENGTH]
             sequences[seq].append(i)
+
+            # print(sys.getsizeof(seq))
+            # print(sys.getsizeof(i))
+            # print(sys.getsizeof(sequences[seq]))
+            # exit()
+
             pbar.update(1)
     
     # Keep only sequences that appear more than once
@@ -60,12 +65,14 @@ def compress_data(input_file):
     print("Compressing data...")
     compressed_data = bytearray(data)
     for seq, token in tqdm(replacements.items()):
+    # for seq, positions in tqdm(sequences.items()):
         pos = 0
         while True:
             pos = data.find(seq, pos)
             if pos == -1:
                 break
             compressed_data[pos:pos + len(seq)] = token
+            # compressed_data[pos:pos + len(seq)] = positions
             pos += 1
     
     # Save dictionary and compressed data
@@ -77,7 +84,13 @@ def compress_data(input_file):
             f.write(struct.pack('I', len(seq)))
             f.write(seq)
             f.write(token)
-    
+
+            print(len(seq))
+            print(sys.getsizeof(seq))
+            print(len(token))
+            print(sys.getsizeof(token))
+            exit()
+
     # Save compressed data
     with open(input_file + '.compressed', 'wb') as f:
         f.write(compressed_data)
