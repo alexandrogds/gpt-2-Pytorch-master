@@ -27,28 +27,34 @@ def find_sequences(data):
     # Keep only sequences that appear more than once
     return {k: v for k, v in sequences.items() if len(v) > 1}
 
-def compress_data(input_file, encode=None):
+def compress_data(input_file):
     # Read input file
-    if encode:
-        # Store original text data
-        with open(input_file, 'r', encoding=encode) as f:
-            text_data = f.read()
-            data = text_data.encode(encode)
-    else:
-        with open(input_file, 'rb') as f:
-            data = f.read()
+    with open(input_file, 'rb') as f:
+        data = f.read()
     
     # Find repeating sequences
+    print("Finding sequences...")
     sequences = find_sequences(data)
     
     # Create replacement dictionary
     replacements = {}
-    current_token = b'\xFE\x00'  # Changed from FF to FE to avoid UTF-8 conflicts
+    token_value = 0
+    
+    # Maximum number of tokens possible with 2 bytes (excluding 0xFF which is reserved)
+    MAX_TOKENS = 65024  # (254 * 256)
     
     for seq in sequences.keys():
-        token = current_token
+        if token_value >= MAX_TOKENS:
+            print("Warning: Maximum token limit reached. Some sequences will not be compressed.")
+            break
+            
+        # Generate token bytes
+        high_byte = (token_value // 256) % 256
+        low_byte = token_value % 256
+        token = bytes([high_byte, low_byte])
+        
         replacements[seq] = token
-        current_token = bytes([current_token[0], current_token[1] + 1])
+        token_value += 1
     
     # Compress data by replacing sequences
     print("Compressing data...")
@@ -62,17 +68,11 @@ def compress_data(input_file, encode=None):
             compressed_data[pos:pos + len(seq)] = token
             pos += 1
     
-    # Save dictionary and compressed data with encoding info
+    # Save dictionary and compressed data
     with open(input_file + '.dict', 'wb') as f:
-        # Save encoding flag
-        f.write(struct.pack('I', 1 if encode else 0))
-        if encode:
-            enc_bytes = encode.encode('ascii')
-            f.write(struct.pack('I', len(enc_bytes)))
-            f.write(enc_bytes)
-        
-        # Save dictionary size and entries
+        # Save dictionary size
         f.write(struct.pack('I', len(replacements)))
+        # Save each sequence and its token
         for seq, token in replacements.items():
             f.write(struct.pack('I', len(seq)))
             f.write(seq)
@@ -89,6 +89,6 @@ def compress_data(input_file, encode=None):
     print(f"Compressed size: {compressed_size:,} bytes")
 
 if __name__ == "__main__":
-    input_file = "LICENSE"
-    encode = 'utf-8'  # Set to None for binary files
-    compress_data(input_file, encode)
+    input_file = "gpt2-pytorch_model.bin"
+    input_file = r"C:\Users\user\Downloads\rufus-4.6p.exe"
+    compress_data(input_file)
